@@ -17,35 +17,45 @@ async def find_price():
         await context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
         page = await context.new_page()
 
-        await page.goto('https://www.tefas.gov.tr/FonAnaliz.aspx?fon=AAK', wait_until='networkidle', timeout=30000)
-        await asyncio.sleep(2)
+        # Tüm network isteklerini yakala
+        captured = []
+        async def on_response(response):
+            if 'tefas' in response.url and response.status == 200:
+                captured.append(response.url)
 
+        page.on('response', on_response)
+
+        print("Sayfa yükleniyor...")
+        await page.goto('https://www.tefas.gov.tr/FonAnaliz.aspx?fon=AAK', wait_until='domcontentloaded', timeout=30000)
+
+        # 10 saniye bekle — tüm JS yüklensin
+        print("10 saniye bekleniyor...")
+        await asyncio.sleep(10)
+
+        print(f"\nYakalanan URL'ler ({len(captured)}):")
+        for url in captured:
+            print(f"  {url[:100]}")
+
+        # Grafik elementinin içeriğine bak
         html = await page.content()
 
-        # "fiyat" kelimesinin etrafındaki 200 karakteri bul
-        for match in re.finditer(r'.{0,100}[Ff]iyat.{0,100}', html):
-            snippet = match.group()
-            if any(c.isdigit() for c in snippet):
-                print(f"FIYAT BULUNAN: {snippet[:200]}")
-                print("---")
+        # Sıfır olmayan sayı dizilerini bul
+        nonzero = re.findall(r'\[([^\]]*[1-9][^\]]*)\]', html)
+        print(f"\nSıfır olmayan diziler ({len(nonzero)}):")
+        for arr in nonzero[:5]:
+            if '.' in arr and len(arr) < 200:
+                print(f"  {arr[:150]}")
 
-        # Tüm span elementlerini değerleriyle göster
-        print("\n=== SPAN ELEMENTLERI ===")
-        spans = await page.query_selector_all('span, td, div')
-        for el in spans:
-            try:
-                eid = await el.get_attribute('id') or ''
-                text = (await el.inner_text()).strip()
-                # Kısa ve sayı içeren elementler
-                if eid and len(text) < 50 and any(c.isdigit() for c in text) and '.' in text:
-                    print(f"id='{eid}': '{text}'")
-            except:
-                pass
+        # Sayfa içindeki tüm sayısal değerleri kontrol et
+        # Özellikle fon fiyatı olabilecek 0.001-999 arası değerler
+        numbers = re.findall(r'\b(\d+\.\d{3,8})\b', html)
+        unique = list(set(numbers))
+        print(f"\nSayısal değerler (benzersiz, {len(unique)} adet):")
+        print(unique[:20])
 
         await browser.close()
 
 if __name__ == '__main__':
     asyncio.run(find_price())
-    # Boş json kaydet
     with open('funds.json', 'w') as f:
         json.dump({'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'count': 0, 'funds': {}}, f)
