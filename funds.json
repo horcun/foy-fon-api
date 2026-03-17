@@ -1,5 +1,66 @@
 {
-  "updated_at": "2026-03-17 06:18:56",
-  "count": 0,
-  "funds": {}
+  "updated_at": "2026-03-17 06:23:58",
+  "count": 10,
+  "funds": {
+    "AAK": {
+      "code": "AAK",
+      "name": "Fon Detaylı Analiz",
+      "price": 2.2026,
+      "date": "2026-03-17"
+    },
+    "AAL": {
+      "code": "AAL",
+      "name": "Fon Detaylı Analiz",
+      "price": 2.2026,
+      "date": "2026-03-17"
+    },
+    "AAS": {
+      "code": "AAS",
+      "name": "Fon Detaylı Analiz",
+      "price": 2.2026,
+      "date": "2026-03-17"
+    },
+    "AAV": {
+      "code": "AAV",
+      "name": "Fon Detaylı Analiz",
+      "price": 2.2026,
+      "date": "2026-03-17"
+    },
+    "ABU": {
+      "code": "ABU",
+      "name": "Fon Detaylı Analiz",
+      "price": 2.2026,
+      "date": "2026-03-17"
+    },
+    "ACC": {
+      "code": "ACC",
+      "name": "Fon Detaylı Analiz",
+      "price": 2.2026,
+      "date": "2026-03-17"
+    },
+    "ACT": {
+      "code": "ACT",
+      "name": "Fon Detaylı Analiz",
+      "price": 2.2026,
+      "date": "2026-03-17"
+    },
+    "ADA": {
+      "code": "ADA",
+      "name": "Fon Detaylı Analiz",
+      "price": 2.2026,
+      "date": "2026-03-17"
+    },
+    "ADB": {
+      "code": "ADB",
+      "name": "Fon Detaylı Analiz",
+      "price": 2.2026,
+      "date": "2026-03-17"
+    },
+    "ADG": {
+      "code": "ADG",
+      "name": "Fon Detaylı Analiz",
+      "price": 2.2026,
+      "date": "2026-03-17"
+    }
+  }
 }
