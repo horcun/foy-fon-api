@@ -1,4 +1,4 @@
-name: TEFAS Fon Fiyatlari
+name: fetch-fon
 
 on:
   schedule:
@@ -6,28 +6,20 @@ on:
   workflow_dispatch:
 
 jobs:
-  fetch-fon-prices:
+  fetch:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Python kur
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-
-      - name: Kutuphane kur
-        run: pip install playwright
-
-      - name: Chromium kur
-        run: playwright install chromium
-
-      - name: Chromium deps kur
-        run: playwright install-deps chromium
-
-      - name: TEFAS fon fiyatlarini cek
-        run: python fetch_fon.py
-
-      - name: Degisiklikleri kaydet
-        run: git config --global user.email "foy-bot@foy.app" && git config --global user.name "FOY Bot" && git add funds.json && git diff --staged --quiet || git commit -m "Fon fiyatlari guncellendi" && git push
+      - run: pip install playwright
+      - run: playwright install chromium
+      - run: playwright install-deps chromium
+      - run: python fetch_fon.py
+      - run: |
+          git config --global user.email "bot@foy.app"
+          git config --global user.name "bot"
+          git add funds.json
+          git diff --staged --quiet || git commit -m "update"
+          git push
