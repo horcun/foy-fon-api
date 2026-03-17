@@ -26,69 +26,81 @@ async def fetch_all_funds():
 
         page = await context.new_page()
 
-        # API yanıtlarını yakala
+        # Tüm API yanıtlarını yakala
         async def handle_response(response):
-            if 'BindHistoryInfo' in response.url or 'BindFundReturn' in response.url or 'GetAllFund' in response.url:
+            url = response.url
+            if 'tefas.gov.tr/api' in url or 'BindHistory' in url or 'GetFund' in url or 'Bind' in url:
                 try:
                     text = await response.text()
-                    print(f"API yakalandı: {response.url}")
-                    print(f"İlk 200 karakter: {text[:200]}")
+                    print(f"\n📡 API: {url}")
+                    print(f"   Status: {response.status}")
+                    print(f"   İlk 300: {text[:300]}")
                     if not text.strip().startswith('<'):
-                        data = json.loads(text)
-                        rows = data.get('data', [])
-                        print(f"✅ {len(rows)} satır!")
-                        intercepted.extend(rows)
+                        try:
+                            data = json.loads(text)
+                            rows = data.get('data', [])
+                            if rows:
+                                print(f"   ✅ {len(rows)} satır!")
+                                intercepted.extend(rows)
+                        except:
+                            pass
                 except Exception as e:
-                    print(f"Hata: {e}")
+                    print(f"   Hata: {e}")
 
         page.on('response', handle_response)
 
-        # Fon Analiz sayfasına git
-        print("Fon Analiz sayfasına gidiliyor...")
+        print("TEFAS açılıyor...")
         await page.goto('https://www.tefas.gov.tr/FonAnaliz.aspx', wait_until='networkidle', timeout=60000)
         print(f"Sayfa: {await page.title()}")
         await asyncio.sleep(3)
 
-        # Sayfadaki tüm butonları listele
-        buttons = await page.query_selector_all('input[type=button], button, input[type=submit]')
-        print(f"Buton sayısı: {len(buttons)}")
-        for i, btn in enumerate(buttons[:10]):
+        # "Analiz Et" butonuna tıkla
+        print("\n'Analiz Et' butonuna tıklanıyor...")
+        buttons = await page.query_selector_all('input[type=button], button')
+        for btn in buttons:
             val = await btn.get_attribute('value') or await btn.inner_text()
-            bid = await btn.get_attribute('id') or ''
-            print(f"  Buton {i}: '{val}' id='{bid}'")
+            if 'Analiz' in str(val):
+                await btn.click()
+                print("Tıklandı!")
+                break
 
-        # Sayfadaki select/dropdown'ları listele
-        selects = await page.query_selector_all('select')
-        print(f"Select sayısı: {len(selects)}")
-        for i, sel in enumerate(selects[:5]):
-            sid = await sel.get_attribute('id') or ''
-            print(f"  Select {i}: id='{sid}'")
+        await asyncio.sleep(5)
+        print(f"\nYakalanan toplam: {len(intercepted)} satır")
 
-        await asyncio.sleep(3)
-        print(f"Yakalanan: {len(intercepted)} satır")
+        # Sonuçları kaydet
+        fund_latest = {}
+        for row in intercepted:
+            code = row.get('FONKODU', '')
+            if code:
+                fund_latest[code] = {
+                    'code': code,
+                    'name': row.get('FONUNVAN', ''),
+                    'price': float(row.get('FIYAT', 0) or 0),
+                    'date': row.get('TARIH', ''),
+                }
 
         await browser.close()
-
-    return all_funds, intercepted
+        return fund_latest
 
 
 if __name__ == '__main__':
     print("=" * 50)
-    print("TEFAS - Sayfa Keşfi")
+    print("TEFAS - Analiz Et Butonu")
     print("=" * 50)
 
-    funds, intercepted = asyncio.run(fetch_all_funds())
-    print(f"\nYakalanan toplam: {len(intercepted)}")
+    funds = asyncio.run(fetch_all_funds())
+    print(f"\nToplam {len(funds)} fon")
 
-    # Boş json kaydet
     output = {
         'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'count': len(intercepted),
-        'funds': {},
-        'raw_sample': intercepted[:2] if intercepted else []
+        'count': len(funds),
+        'funds': funds,
     }
 
     with open('funds.json', 'w', encoding='utf-8') as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
     print("funds.json kaydedildi!")
+    if funds:
+        sample = list(funds.values())[0]
+        print(f"Örnek: {sample}")
