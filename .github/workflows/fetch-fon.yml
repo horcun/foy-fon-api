@@ -13,6 +13,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Python kur
+      - name: Kütüphane kur
+        run: pip install requests
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
