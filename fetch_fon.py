@@ -10,97 +10,85 @@ async def fetch_all_funds():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
-            args=[
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-blink-features=AutomationControlled',
-            ]
+            args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled']
         )
 
         context = await browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             locale='tr-TR',
             timezone_id='Europe/Istanbul',
-            viewport={'width': 1366, 'height': 768},
         )
 
         await context.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            Object.defineProperty(navigator, 'languages', { get: () => ['tr-TR', 'tr'] });
             window.chrome = { runtime: {} };
         """)
 
         page = await context.new_page()
 
-        # TEFAS'ın kendi API çağrılarını yakala
+        # API yanıtlarını yakala
         async def handle_response(response):
-            if 'BindHistoryInfo' in response.url:
+            if 'BindHistoryInfo' in response.url or 'BindFundReturn' in response.url or 'GetAllFund' in response.url:
                 try:
                     text = await response.text()
+                    print(f"API yakalandı: {response.url}")
+                    print(f"İlk 200 karakter: {text[:200]}")
                     if not text.strip().startswith('<'):
                         data = json.loads(text)
                         rows = data.get('data', [])
-                        print(f"✅ API yanıtı yakalandı! {len(rows)} fon")
+                        print(f"✅ {len(rows)} satır!")
                         intercepted.extend(rows)
-                    else:
-                        print(f"❌ API HTML döndü: {text[:100]}")
                 except Exception as e:
-                    print(f"Yakalama hatası: {e}")
+                    print(f"Hata: {e}")
 
         page.on('response', handle_response)
 
-        # Sayfa yükle
-        print("TEFAS açılıyor...")
+        # Fon Analiz sayfasına git
+        print("Fon Analiz sayfasına gidiliyor...")
         await page.goto('https://www.tefas.gov.tr/FonAnaliz.aspx', wait_until='networkidle', timeout=60000)
-        print(f"Sayfa yüklendi: {await page.title()}")
-
+        print(f"Sayfa: {await page.title()}")
         await asyncio.sleep(3)
 
-        # TEFAS'ın arama kutusunu kullan — gerçek kullanıcı gibi
-        # Fon karşılaştırma sayfasına git — tüm fonları listeler
-        print("Fon karşılaştırma sayfasına gidiliyor...")
-        await page.goto('https://www.tefas.gov.tr/FonKarsilastirma.aspx', wait_until='networkidle', timeout=60000)
-        print(f"Karşılaştırma sayfası: {await page.title()}")
+        # Sayfadaki tüm butonları listele
+        buttons = await page.query_selector_all('input[type=button], button, input[type=submit]')
+        print(f"Buton sayısı: {len(buttons)}")
+        for i, btn in enumerate(buttons[:10]):
+            val = await btn.get_attribute('value') or await btn.inner_text()
+            bid = await btn.get_attribute('id') or ''
+            print(f"  Buton {i}: '{val}' id='{bid}'")
 
-        await asyncio.sleep(5)
+        # Sayfadaki select/dropdown'ları listele
+        selects = await page.query_selector_all('select')
+        print(f"Select sayısı: {len(selects)}")
+        for i, sel in enumerate(selects[:5]):
+            sid = await sel.get_attribute('id') or ''
+            print(f"  Select {i}: id='{sid}'")
 
-        print(f"Yakalanan toplam satır: {len(intercepted)}")
-
-        # Yakalanan verilerden fon fiyatlarını çıkar
-        for row in intercepted:
-            code = row.get('FONKODU', '')
-            date = row.get('TARIH', '')
-            if code and code not in all_funds:
-                all_funds[code] = {
-                    'code': code,
-                    'name': row.get('FONUNVAN', ''),
-                    'price': float(row.get('FIYAT', 0) or 0),
-                    'date': date,
-                }
+        await asyncio.sleep(3)
+        print(f"Yakalanan: {len(intercepted)} satır")
 
         await browser.close()
 
-    return all_funds
+    return all_funds, intercepted
 
 
 if __name__ == '__main__':
     print("=" * 50)
-    print("TEFAS - Intercept Yöntemi")
+    print("TEFAS - Sayfa Keşfi")
     print("=" * 50)
 
-    funds = asyncio.run(fetch_all_funds())
-    print(f"\nToplam {len(funds)} fon bulundu")
+    funds, intercepted = asyncio.run(fetch_all_funds())
+    print(f"\nYakalanan toplam: {len(intercepted)}")
 
+    # Boş json kaydet
     output = {
         'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'count': len(funds),
-        'funds': funds,
+        'count': len(intercepted),
+        'funds': {},
+        'raw_sample': intercepted[:2] if intercepted else []
     }
 
     with open('funds.json', 'w', encoding='utf-8') as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
     print("funds.json kaydedildi!")
-    if funds:
-        sample = list(funds.values())[0]
-        print(f"Örnek: {sample}")
