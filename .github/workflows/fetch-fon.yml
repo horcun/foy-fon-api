@@ -1,0 +1,29 @@
+name: TEFAS Fon Fiyatları
+
+on:
+  schedule:
+    - cron: '0 4 * * *'  # Her sabah 07:00 Türkiye saati (UTC+3)
+  workflow_dispatch:      # Elle de çalıştırabilmek için
+
+jobs:
+  fetch-fon-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: TEFAS'tan fon fiyatlarını çek
+        run: python fetch_fon.py
+
+      - name: Değişiklikleri kaydet
+        run: |
+          git config --global user.email "foy-bot@foy.app"
+          git config --global user.name "FÖY Bot"
+          git add funds.json
+          git diff --staged --quiet || git commit -m "Fon fiyatları güncellendi $(date +'%Y-%m-%d %H:%M')"
+          git push
