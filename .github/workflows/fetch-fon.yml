@@ -17,8 +17,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Kutuphane kur
-        run: pip install requests
+     - name: Kutuphane kur
+        run: |
+          pip install playwright
+          playwright install chromium
+          playwright install-deps chromium
 
       - name: TEFAS fon fiyatlarini cek
         run: python fetch_fon.py
