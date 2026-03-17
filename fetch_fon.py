@@ -8,54 +8,93 @@ async def find_price():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
-            args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled']
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
+                '--disable-gpu',
+            ]
         )
         context = await browser.new_context(
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
             locale='tr-TR',
+            timezone_id='Europe/Istanbul',
+            viewport={'width': 390, 'height': 844},
+            device_scale_factor=3,
+            is_mobile=True,
+            has_touch=True,
         )
-        await context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
+
+        await context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'platform', { get: () => 'iPhone' });
+            Object.defineProperty(navigator, 'languages', { get: () => ['tr-TR', 'tr'] });
+            delete window.__playwright;
+            delete window.__pwInitScripts;
+        """)
+
         page = await context.new_page()
 
-        # Tüm network isteklerini yakala
-        captured = []
+        captured_api = []
         async def on_response(response):
-            if 'tefas' in response.url and response.status == 200:
-                captured.append(response.url)
+            if 'BindHistoryInfo' in response.url or 'api/DB' in response.url:
+                try:
+                    text = await response.text()
+                    print(f"\n🎯 API YAKALANDI: {response.url}")
+                    print(f"   {text[:300]}")
+                    if not text.strip().startswith('<'):
+                        captured_api.append(json.loads(text))
+                except:
+                    pass
 
         page.on('response', on_response)
 
-        print("Sayfa yükleniyor...")
-        await page.goto('https://www.tefas.gov.tr/FonAnaliz.aspx?fon=AAK', wait_until='domcontentloaded', timeout=30000)
+        print("iPhone modunda TEFAS açılıyor...")
+        await page.goto('https://www.tefas.gov.tr/FonAnaliz.aspx?fon=AAK', wait_until='networkidle', timeout=60000)
+        await asyncio.sleep(8)
 
-        # 10 saniye bekle — tüm JS yüklensin
-        print("10 saniye bekleniyor...")
-        await asyncio.sleep(10)
+        print(f"\nYakalanan API: {len(captured_api)}")
 
-        print(f"\nYakalanan URL'ler ({len(captured)}):")
-        for url in captured:
-            print(f"  {url[:100]}")
-
-        # Grafik elementinin içeriğine bak
-        html = await page.content()
-
-        # Sıfır olmayan sayı dizilerini bul
-        nonzero = re.findall(r'\[([^\]]*[1-9][^\]]*)\]', html)
-        print(f"\nSıfır olmayan diziler ({len(nonzero)}):")
-        for arr in nonzero[:5]:
-            if '.' in arr and len(arr) < 200:
-                print(f"  {arr[:150]}")
-
-        # Sayfa içindeki tüm sayısal değerleri kontrol et
-        # Özellikle fon fiyatı olabilecek 0.001-999 arası değerler
-        numbers = re.findall(r'\b(\d+\.\d{3,8})\b', html)
-        unique = list(set(numbers))
-        print(f"\nSayısal değerler (benzersiz, {len(unique)} adet):")
-        print(unique[:20])
+        # Tüm yakalanan veriyi işle
+        all_funds = {}
+        for data in captured_api:
+            rows = data.get('data', [])
+            for row in rows:
+                code = row.get('FONKODU', '')
+                if code:
+                    all_funds[code] = {
+                        'code': code,
+                        'name': row.get('FONUNVAN', ''),
+                        'price': float(row.get('FIYAT', 0) or 0),
+                        'date': row.get('TARIH', ''),
+                    }
 
         await browser.close()
+        return all_funds
 
 if __name__ == '__main__':
-    asyncio.run(find_price())
-    with open('funds.json', 'w') as f:
-        json.dump({'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'count': 0, 'funds': {}}, f)
+    print("=" * 50)
+    print("TEFAS - iPhone Modu")
+    print("=" * 50)
+
+    funds = asyncio.run(find_price())
+    print(f"\nToplam {len(funds)} fon")
+
+    output = {
+        'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'count': len(funds),
+        'funds': funds,
+    }
+
+    with open('funds.json', 'w', encoding='utf-8') as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+
+    print("Bitti!")
+    if funds:
+        for k, v in list(funds.items())[:3]:
+            print(f"  {k}: {v}")
