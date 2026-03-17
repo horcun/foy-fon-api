@@ -1,88 +1,78 @@
-import asyncio
 import json
-import re
-from datetime import datetime
-from playwright.async_api import async_playwright
+from datetime import datetime, timedelta
+from curl_cffi import requests
 
-async def find_price():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=[
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-blink-features=AutomationControlled',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu',
-            ]
+def fetch_all_funds():
+    today = datetime.now()
+    end_date = today.strftime("%d.%m.%Y")
+    start_date = (today - timedelta(days=7)).strftime("%d.%m.%Y")
+
+    session = requests.Session(impersonate="chrome120")
+
+    # Cookie al
+    print("Session başlatılıyor...")
+    try:
+        session.get(
+            'https://www.tefas.gov.tr/FonAnaliz.aspx',
+            timeout=30
         )
-        context = await browser.new_context(
-            user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-            locale='tr-TR',
-            timezone_id='Europe/Istanbul',
-            viewport={'width': 390, 'height': 844},
-            device_scale_factor=3,
-            is_mobile=True,
-            has_touch=True,
-        )
+        print("Session OK")
+    except Exception as e:
+        print(f"Session hatası: {e}")
 
-        await context.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            Object.defineProperty(navigator, 'platform', { get: () => 'iPhone' });
-            Object.defineProperty(navigator, 'languages', { get: () => ['tr-TR', 'tr'] });
-            delete window.__playwright;
-            delete window.__pwInitScripts;
-        """)
+    all_funds = {}
 
-        page = await context.new_page()
+    for fontip in ['YAT', 'EMK', 'BYF']:
+        print(f"{fontip} çekiliyor...")
+        try:
+            res = session.post(
+                'https://www.tefas.gov.tr/api/DB/BindHistoryInfo',
+                data=f'startdate={start_date}&enddate={end_date}&fontip={fontip}&fonkod=',
+                headers={
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json, text/javascript, */*; q=0.01',
+                    'Referer': 'https://www.tefas.gov.tr/FonAnaliz.aspx',
+                    'Origin': 'https://www.tefas.gov.tr',
+                },
+                timeout=30
+            )
 
-        captured_api = []
-        async def on_response(response):
-            if 'BindHistoryInfo' in response.url or 'api/DB' in response.url:
-                try:
-                    text = await response.text()
-                    print(f"\n🎯 API YAKALANDI: {response.url}")
-                    print(f"   {text[:300]}")
-                    if not text.strip().startswith('<'):
-                        captured_api.append(json.loads(text))
-                except:
-                    pass
+            text = res.text
+            print(f"  Status: {res.status_code}")
+            print(f"  Yanıt: {text[:200]}")
 
-        page.on('response', on_response)
+            if text.strip().startswith('<'):
+                print(f"  HTML döndü")
+                continue
 
-        print("iPhone modunda TEFAS açılıyor...")
-        await page.goto('https://www.tefas.gov.tr/FonAnaliz.aspx?fon=AAK', wait_until='networkidle', timeout=60000)
-        await asyncio.sleep(8)
-
-        print(f"\nYakalanan API: {len(captured_api)}")
-
-        # Tüm yakalanan veriyi işle
-        all_funds = {}
-        for data in captured_api:
+            data = res.json()
             rows = data.get('data', [])
+            print(f"  ✅ {len(rows)} fon!")
+
             for row in rows:
                 code = row.get('FONKODU', '')
-                if code:
+                date = row.get('TARIH', '')
+                if code not in all_funds or date > all_funds[code]['date']:
                     all_funds[code] = {
                         'code': code,
                         'name': row.get('FONUNVAN', ''),
                         'price': float(row.get('FIYAT', 0) or 0),
-                        'date': row.get('TARIH', ''),
+                        'date': date,
                     }
 
-        await browser.close()
-        return all_funds
+        except Exception as e:
+            print(f"  Hata: {e}")
+
+    return all_funds
+
 
 if __name__ == '__main__':
     print("=" * 50)
-    print("TEFAS - iPhone Modu")
+    print("TEFAS - curl_cffi Chrome TLS")
     print("=" * 50)
 
-    funds = asyncio.run(find_price())
+    funds = fetch_all_funds()
     print(f"\nToplam {len(funds)} fon")
 
     output = {
